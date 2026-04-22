@@ -67,14 +67,22 @@ $shortcut.Save()
 
 # --- Create Desktop shortcut ---
 Write-Host "[*] Creating Desktop shortcut..." -ForegroundColor Cyan
-$desktopPath = [Environment]::GetFolderPath("Desktop")
-$desktopShortcut = Join-Path $desktopPath "$AppName.lnk"
-$shortcut2 = $shell.CreateShortcut($desktopShortcut)
-$shortcut2.TargetPath = Join-Path $InstallDir $ExeName
-$shortcut2.WorkingDirectory = $InstallDir
-$shortcut2.Description = "AI-powered interview assistant with screen capture protection"
-$shortcut2.IconLocation = (Join-Path $InstallDir $ExeName) + ",0"
-$shortcut2.Save()
+try {
+    $desktopPath = [Environment]::GetFolderPath("Desktop")
+    if (-not $desktopPath -or -not (Test-Path $desktopPath)) {
+        $desktopPath = Join-Path $env:USERPROFILE "Desktop"
+    }
+    $desktopShortcut = Join-Path $desktopPath "$AppName.lnk"
+    $shortcut2 = $shell.CreateShortcut($desktopShortcut)
+    $shortcut2.TargetPath = Join-Path $InstallDir $ExeName
+    $shortcut2.WorkingDirectory = $InstallDir
+    $shortcut2.Description = "AI-powered interview assistant with screen capture protection"
+    $shortcut2.IconLocation = (Join-Path $InstallDir $ExeName) + ",0"
+    $shortcut2.Save()
+} catch {
+    Write-Host "    - Desktop shortcut skipped (path issue)" -ForegroundColor Yellow
+    $desktopShortcut = "(skipped)"
+}
 
 # --- Register auto-start on login ---
 Write-Host "[*] Registering auto-start on login..." -ForegroundColor Cyan
