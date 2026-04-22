@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "restore": {
+    "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\ScreenGuardAI.csproj": {}
+  },
+  "projects": {
+    "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\ScreenGuardAI.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\ScreenGuardAI.csproj",
+        "projectName": "ScreenGuardAI",
+        "projectPath": "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\ScreenGuardAI.csproj",
+        "packagesPath": "C:\\Users\\henry\\.nuget\\packages\\",
+        "outputPath": "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\henry\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "dependencies": {
+            "Hardcodet.NotifyIcon.Wpf": {
+              "target": "Package",
+              "version": "[1.1.0, )"
+            },
+            "Microsoft.Extensions.Configuration.Json": {
+              "target": "Package",
+              "version": "[8.0.1, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.10, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WPF": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\ran-page\\.dotnet\\sdk\\8.0.420/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

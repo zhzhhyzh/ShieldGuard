@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "dgSpecHash": "FX9NS7x81vs=",
+  "success": true,
+  "projectFilePath": "c:\\ran-page\\ScreenGuardAI\\ScreenGuardAI\\ScreenGuardAI.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\henry\\.nuget\\packages\\hardcodet.notifyicon.wpf\\1.1.0\\hardcodet.notifyicon.wpf.1.1.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.configuration\\8.0.0\\microsoft.extensions.configuration.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\8.0.0\\microsoft.extensions.configuration.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.configuration.fileextensions\\8.0.1\\microsoft.extensions.configuration.fileextensions.8.0.1.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.configuration.json\\8.0.1\\microsoft.extensions.configuration.json.8.0.1.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.fileproviders.abstractions\\8.0.0\\microsoft.extensions.fileproviders.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.fileproviders.physical\\8.0.0\\microsoft.extensions.fileproviders.physical.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.filesystemglobbing\\8.0.0\\microsoft.extensions.filesystemglobbing.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.extensions.primitives\\8.0.0\\microsoft.extensions.primitives.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\microsoft.win32.systemevents\\8.0.0\\microsoft.win32.systemevents.8.0.0.nupkg.sha512",
+    "C:\\Users\\henry\\.nuget\\packages\\system.drawing.common\\8.0.10\\system.drawing.common.8.0.10.nupkg.sha512"
+  ],
+  "logs": []
+}
