@@ -16,6 +16,8 @@ public partial class SettingsWindow : Window
 
     // Store keys per provider so switching doesn't lose them
     private readonly Dictionary<string, string> _providerKeys = new();
+    // Store failover checkbox references
+    private readonly Dictionary<string, System.Windows.Controls.CheckBox> _failoverCheckBoxes = new();
 
     public SettingsWindow(SettingsService settingsService, AIProviderService aiService)
     {
@@ -68,6 +70,61 @@ public partial class SettingsWindow : Window
 
         _isInitializing = false;
         UpdateProviderUI();
+        PopulateFailoverCheckboxes();
+    }
+
+    private void PopulateFailoverCheckboxes()
+    {
+        FailoverPanel.Children.Clear();
+        _failoverCheckBoxes.Clear();
+
+        var savedFailovers = _settingsService.Settings.FailoverProviders ?? new List<string>();
+
+        foreach (var kvp in AIProviderService.Providers)
+        {
+            var providerKey = kvp.Key;
+            var def = kvp.Value;
+
+            var cb = new CheckBox
+            {
+                Content = $"  {def.Name}" + (def.FreeTier ? " (FREE)" : ""),
+                Tag = providerKey,
+                IsChecked = savedFailovers.Contains(providerKey),
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#00CC33")),
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 11,
+                Margin = new Thickness(0, 2, 0, 2),
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+
+            _failoverCheckBoxes[providerKey] = cb;
+            FailoverPanel.Children.Add(cb);
+        }
+
+        UpdateFailoverVisibility();
+    }
+
+    /// <summary>
+    /// Disables the failover checkbox for the currently selected primary provider.
+    /// </summary>
+    private void UpdateFailoverVisibility()
+    {
+        var selectedKey = GetSelectedProviderKey();
+        foreach (var kvp in _failoverCheckBoxes)
+        {
+            if (kvp.Key == selectedKey)
+            {
+                kvp.Value.IsEnabled = false;
+                kvp.Value.IsChecked = false;
+                kvp.Value.Opacity = 0.4;
+            }
+            else
+            {
+                kvp.Value.IsEnabled = true;
+                kvp.Value.Opacity = 1.0;
+            }
+        }
     }
 
     private string GetSelectedProviderKey()
@@ -131,6 +188,10 @@ public partial class SettingsWindow : Window
             ((ComboBoxItem)ModelCombo.Items[0]!).IsSelected = true;
 
         StatusText.Text = "";
+
+        // Update failover checkboxes (disable current primary)
+        if (_failoverCheckBoxes.Count > 0)
+            UpdateFailoverVisibility();
     }
 
     private void GetKeyLink_Click(object sender, MouseButtonEventArgs e)
@@ -185,6 +246,15 @@ public partial class SettingsWindow : Window
 
         // Save selected provider
         _settingsService.Settings.SelectedProvider = providerKey;
+
+        // Save failover providers (checked checkboxes, in order)
+        var failovers = new List<string>();
+        foreach (var kvp in _failoverCheckBoxes)
+        {
+            if (kvp.Key != providerKey && kvp.Value.IsChecked == true)
+                failovers.Add(kvp.Key);
+        }
+        _settingsService.Settings.FailoverProviders = failovers;
 
         // Save all provider keys & selected model
         var selectedModel = (ModelCombo.SelectedItem as ComboBoxItem)?.Content?.ToString();

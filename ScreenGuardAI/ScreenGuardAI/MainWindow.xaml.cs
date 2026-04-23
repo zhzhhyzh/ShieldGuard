@@ -149,8 +149,9 @@ public partial class MainWindow : Window
         var providerKey = _settingsService.Settings.SelectedProvider;
         var activeConfig = _settingsService.Settings.GetActiveProvider();
         var apiKey = activeConfig.ApiKey;
+        var providerChain = _settingsService.Settings.GetProviderChain();
 
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (providerChain.Count == 0 && string.IsNullOrWhiteSpace(apiKey))
         {
             var providerName = AIProviderService.Providers.TryGetValue(providerKey, out var def) ? def.Name : providerKey;
             MessageBox.Show($"Please configure your {providerName} API key in Settings first.",
@@ -158,6 +159,10 @@ public partial class MainWindow : Window
             _isAnalyzing = false;
             return;
         }
+
+        // If no failover chain built but primary has a key, use single-provider chain
+        if (providerChain.Count == 0)
+            providerChain = new List<string> { providerKey };
 
         // Update UI for loading state
         CaptureButton.IsEnabled = false;
@@ -206,12 +211,34 @@ public partial class MainWindow : Window
             if (contextParts.Count > 0)
                 context = string.Join("\n\n", contextParts);
 
-            // Call the AI provider
+            // Call the AI provider with failover support
             Models.AIResponse response;
-            var model = activeConfig.Model;
-            response = _currentMode == InterviewMode.Coding
-                ? await _aiService.AnalyzeCodingPracticalAsync(base64, providerKey, apiKey, model, context)
-                : await _aiService.AnalyzeInterviewQAAsync(base64, providerKey, apiKey, model, context);
+            var settings = _settingsService.Settings;
+
+            // Subscribe to failover events for status updates
+            void onProviderSwitched(string name)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    StatusBarText.Text = $"Rate limited — switching to {name}...";
+                    StatusBarText.Foreground = new SolidColorBrush(
+                        (Color)ColorConverter.ConvertFromString("#FFCC00"));
+                });
+            }
+            _aiService.ProviderSwitched += onProviderSwitched;
+
+            try
+            {
+                response = _currentMode == InterviewMode.Coding
+                    ? await _aiService.CallWithFailoverAsync(providerChain,
+                        (pk, key, mdl) => _aiService.AnalyzeCodingPracticalAsync(base64, pk, key, mdl, context), settings)
+                    : await _aiService.CallWithFailoverAsync(providerChain,
+                        (pk, key, mdl) => _aiService.AnalyzeInterviewQAAsync(base64, pk, key, mdl, context), settings);
+            }
+            finally
+            {
+                _aiService.ProviderSwitched -= onProviderSwitched;
+            }
 
             // Display in overlay
             _overlayWindow.ShowResponse(response, _currentMode);
@@ -435,6 +462,41 @@ public partial class MainWindow : Window
 
     private async Task StartListeningAsync()
     {
+        // ── Pre-flight checks before starting audio capture ──
+
+        // Check if profile has data — AI answers are much better with profile context
+        if (!_profileService.Profile.HasData())
+        {
+            var result = MessageBox.Show(
+                "Your Interview Profile is empty. The AI will generate generic answers without knowing your background.\n\n" +
+                "Fill in your profile first for personalized answers (recommended)?\n\n" +
+                "Click YES to open Profile, or NO to continue without it.",
+                "ScreenGuard AI — Profile Reminder",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                Profile_Click(this, new RoutedEventArgs());
+                return; // Let user fill profile first, they can start listening after
+            }
+        }
+
+        // Check if an API key is configured (needed for auto-analysis)
+        var providerKey = _settingsService.Settings.SelectedProvider;
+        var activeConfig = _settingsService.Settings.GetActiveProvider();
+        if (_settingsService.Settings.Audio.AutoAnalyzeOnSpeech &&
+            string.IsNullOrWhiteSpace(activeConfig.ApiKey))
+        {
+            var providerName = AIProviderService.Providers.TryGetValue(providerKey, out var def) ? def.Name : providerKey;
+            MessageBox.Show(
+                $"Auto-analysis is enabled but no API key is configured for {providerName}.\n\n" +
+                "Audio capture will still transcribe speech, but auto-analysis won't work until you set an API key in Settings.",
+                "ScreenGuard AI — API Key Missing",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
         try
         {
             ListenBtn.IsEnabled = false;
@@ -455,6 +517,8 @@ public partial class MainWindow : Window
                 _audioCaptureService.SilenceTimeoutMs = audioSettings.SilenceThresholdMs;
                 _audioCaptureService.SilenceThreshold = audioSettings.SilenceLevel;
                 _audioManager.AutoAnalyzeOnSpeech = audioSettings.AutoAnalyzeOnSpeech;
+                _audioManager.SmartQuestionDetection = audioSettings.SmartQuestionDetection;
+                _audioManager.AnalysisCooldownSeconds = audioSettings.AnalysisCooldownSeconds;
 
                 // Wire events
                 _audioManager.TranscriptUpdated += (fullTranscript, latest) =>

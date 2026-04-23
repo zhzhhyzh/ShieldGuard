@@ -15,6 +15,79 @@ public class AIProviderService
 {
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(90) };
 
+    /// <summary>
+    /// Fired when a failover switches to a different provider. Arg = provider display name.
+    /// </summary>
+    public event Action<string>? ProviderSwitched;
+
+    // Error messages containing these indicate a transient/rate-limit issue worth retrying.
+    private static readonly string[] RetryableErrorPatterns = new[]
+    {
+        "429", "rate limit", "rate_limit", "too many requests",
+        "500", "502", "503", "504",
+        "internal server error", "bad gateway", "service unavailable", "gateway timeout",
+        "overloaded", "capacity"
+    };
+
+    private static bool IsRetryableError(string? errorMessage)
+    {
+        if (string.IsNullOrEmpty(errorMessage)) return false;
+        var lower = errorMessage.ToLowerInvariant();
+        foreach (var pattern in RetryableErrorPatterns)
+        {
+            if (lower.Contains(pattern)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Executes an AI call with automatic failover across the provider chain.
+    /// Only retries on rate-limit (429) or server errors (5xx). Auth errors fail immediately.
+    /// </summary>
+    public async Task<AIResponse> CallWithFailoverAsync(
+        List<string> providerChain,
+        Func<string, string, string, Task<AIResponse>> callFunc,
+        AppSettings settings)
+    {
+        if (providerChain.Count == 0)
+            return new AIResponse { Success = false, ErrorMessage = "No providers configured with API keys. Please set up at least one provider in Settings." };
+
+        AIResponse? lastResponse = null;
+
+        for (int i = 0; i < providerChain.Count; i++)
+        {
+            var providerKey = providerChain[i];
+            var config = settings.GetProviderConfig(providerKey);
+            if (config == null || string.IsNullOrWhiteSpace(config.ApiKey))
+                continue;
+
+            // Notify UI if we're failing over (not the first attempt)
+            if (i > 0)
+            {
+                var name = Providers.TryGetValue(providerKey, out var def) ? def.Name : providerKey;
+                ProviderSwitched?.Invoke(name);
+            }
+
+            lastResponse = await callFunc(providerKey, config.ApiKey, config.Model);
+
+            if (lastResponse.Success)
+                return lastResponse;
+
+            // Check if this is a retryable error (rate limit / server error)
+            if (IsRetryableError(lastResponse.ErrorMessage))
+            {
+                // Continue to next provider in the chain
+                continue;
+            }
+
+            // Non-retryable error (auth, bad request, etc.) — fail immediately
+            return lastResponse;
+        }
+
+        // All providers exhausted
+        return lastResponse ?? new AIResponse { Success = false, ErrorMessage = "All providers failed. Please check your API keys and try again." };
+    }
+
     // --- Provider definitions ---
     public static readonly Dictionary<string, ProviderDefinition> Providers = new()
     {

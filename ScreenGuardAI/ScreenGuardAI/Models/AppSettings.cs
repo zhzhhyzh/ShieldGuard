@@ -12,6 +12,12 @@ public class AppSettings
     public string InterviewMode { get; set; } = "QA";
 
     /// <summary>
+    /// Failover providers tried in order when the primary provider hits rate limits (429) or server errors (5xx).
+    /// Example: ["Groq", "OpenRouter"] — tried after SelectedProvider fails.
+    /// </summary>
+    public List<string> FailoverProviders { get; set; } = new();
+
+    /// <summary>
     /// Gets the provider config for the currently selected provider.
     /// </summary>
     public ProviderConfig GetActiveProvider()
@@ -24,6 +30,45 @@ public class AppSettings
             "OpenRouter" => OpenRouter,
             _ => Gemini
         };
+    }
+
+    /// <summary>
+    /// Gets the provider config by provider key name.
+    /// </summary>
+    public ProviderConfig? GetProviderConfig(string providerKey)
+    {
+        return providerKey switch
+        {
+            "OpenAI" => OpenAI,
+            "Gemini" => Gemini,
+            "Groq" => Groq,
+            "OpenRouter" => OpenRouter,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Builds the full provider chain: primary + failover providers, filtered to those with API keys.
+    /// </summary>
+    public List<string> GetProviderChain()
+    {
+        var chain = new List<string>();
+
+        // Primary provider first
+        var primary = GetProviderConfig(SelectedProvider);
+        if (primary != null && !string.IsNullOrWhiteSpace(primary.ApiKey))
+            chain.Add(SelectedProvider);
+
+        // Then failover providers
+        foreach (var key in FailoverProviders)
+        {
+            if (key == SelectedProvider) continue; // skip duplicate
+            var config = GetProviderConfig(key);
+            if (config != null && !string.IsNullOrWhiteSpace(config.ApiKey))
+                chain.Add(key);
+        }
+
+        return chain;
     }
 }
 
@@ -47,4 +92,8 @@ public class AudioSettings
     public float SilenceLevel { get; set; } = 0.01f;
     public bool AutoAnalyzeOnSpeech { get; set; } = false;
     public bool EnableAudioCapture { get; set; } = false;
+    /// <summary>Only auto-analyze when a question is detected in the transcript.</summary>
+    public bool SmartQuestionDetection { get; set; } = true;
+    /// <summary>Minimum seconds between auto-analysis API calls (protects rate limits).</summary>
+    public int AnalysisCooldownSeconds { get; set; } = 30;
 }

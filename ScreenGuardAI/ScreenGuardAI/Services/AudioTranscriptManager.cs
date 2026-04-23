@@ -3,6 +3,7 @@ namespace ScreenGuardAI.Services;
 /// <summary>
 /// Orchestrates AudioCaptureService and TranscriptionService.
 /// Captures system audio, transcribes speech paragraphs, and maintains a rolling transcript.
+/// Supports smart auto-analysis with question detection and cooldown to protect API rate limits.
 /// </summary>
 public class AudioTranscriptManager : IDisposable
 {
@@ -10,12 +11,25 @@ public class AudioTranscriptManager : IDisposable
     private readonly TranscriptionService _transcriptionService;
     private readonly List<string> _transcriptParagraphs = new();
     private readonly object _transcriptLock = new();
+    private DateTime _lastAnalysisTime = DateTime.MinValue;
 
     /// <summary>Max paragraphs to keep in rolling transcript.</summary>
     public int MaxParagraphs { get; set; } = 20;
 
     /// <summary>Whether to auto-trigger AI analysis when a new paragraph is transcribed.</summary>
     public bool AutoAnalyzeOnSpeech { get; set; }
+
+    /// <summary>
+    /// When true, auto-analysis only triggers when a question is detected in the transcript.
+    /// When false (and AutoAnalyzeOnSpeech is true), every paragraph triggers analysis.
+    /// </summary>
+    public bool SmartQuestionDetection { get; set; } = true;
+
+    /// <summary>
+    /// Minimum seconds between auto-analysis calls to protect API rate limits.
+    /// Manual hotkey (Ctrl+Shift+Q) bypasses this cooldown.
+    /// </summary>
+    public int AnalysisCooldownSeconds { get; set; } = 30;
 
     // Events
     public event Action<string, string>? TranscriptUpdated;  // (fullTranscript, latestParagraph)
@@ -26,6 +40,41 @@ public class AudioTranscriptManager : IDisposable
 
     public bool IsListening => _captureService.IsCapturing;
     public bool IsModelReady => _transcriptionService.IsInitialized;
+
+    // ── Question detection patterns ──
+    private static readonly string[] QuestionKeywords = new[]
+    {
+        "what is", "what are", "what do", "what would", "what can",
+        "how do", "how would", "how can", "how does", "how is",
+        "why do", "why is", "why would", "why does",
+        "can you", "could you", "would you",
+        "tell me about", "explain how", "explain the", "explain your",
+        "describe how", "describe the", "describe your", "describe a time",
+        "walk me through",
+        "have you", "do you", "did you", "are you", "is there",
+        "where do", "where is", "when do", "when did",
+        "which one", "which is",
+        "give me an example", "what's your", "what about",
+    };
+
+    /// <summary>
+    /// Common rhetorical / filler phrases that should NOT trigger auto-analysis.
+    /// Matched after trimming and lowercasing.
+    /// </summary>
+    private static readonly string[] RhetoricalBlocklist = new[]
+    {
+        "right?", "right.", "okay?", "okay.", "ok?", "ok.",
+        "you know?", "you know what i mean?", "know what i mean?",
+        "makes sense?", "make sense?", "does that make sense?",
+        "got it?", "get it?", "see what i mean?",
+        "isn't it?", "wasn't it?", "don't you think?",
+        "yeah?", "yes?", "no?", "huh?", "eh?",
+        "sounds good?", "fair enough?", "correct?",
+        "understood?", "clear?", "alright?",
+    };
+
+    /// <summary>Minimum word count for a transcript to qualify as a real question.</summary>
+    private const int MinQuestionWordCount = 8;
 
     public AudioTranscriptManager(AudioCaptureService captureService, TranscriptionService transcriptionService)
     {
@@ -139,13 +188,94 @@ public class AudioTranscriptManager : IDisposable
 
             if (AutoAnalyzeOnSpeech)
             {
-                AnalysisRequested?.Invoke();
+                TryAutoAnalyze(trimmed);
             }
         }
         catch (Exception ex)
         {
             StatusChanged?.Invoke($"TRANSCRIPTION ERROR: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Decides whether to fire AnalysisRequested based on question detection and cooldown.
+    /// Gate order: cooldown → min-length → rhetorical blocklist → question detection.
+    /// </summary>
+    private void TryAutoAnalyze(string latestParagraph)
+    {
+        // ── Cooldown check ──
+        var elapsed = (DateTime.UtcNow - _lastAnalysisTime).TotalSeconds;
+        if (elapsed < AnalysisCooldownSeconds)
+        {
+            var remaining = AnalysisCooldownSeconds - (int)elapsed;
+            StatusChanged?.Invoke($"AUTO-ANALYZE: cooldown ({remaining}s remaining)");
+            return;
+        }
+
+        // ── Question detection (with rhetorical + min-length filters) ──
+        if (SmartQuestionDetection)
+        {
+            // Min word count — short utterances are almost never real questions
+            var wordCount = latestParagraph.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (wordCount < MinQuestionWordCount)
+            {
+                StatusChanged?.Invoke($"AUTO-ANALYZE: skipped (too short, {wordCount} words)");
+                return;
+            }
+
+            // Rhetorical blocklist — skip common filler phrases
+            if (IsRhetorical(latestParagraph))
+            {
+                StatusChanged?.Invoke("AUTO-ANALYZE: skipped (rhetorical phrase)");
+                return;
+            }
+
+            if (!IsQuestion(latestParagraph))
+            {
+                StatusChanged?.Invoke("AUTO-ANALYZE: skipped (no question detected)");
+                return;
+            }
+            StatusChanged?.Invoke("AUTO-ANALYZE: question detected → triggering analysis");
+        }
+
+        _lastAnalysisTime = DateTime.UtcNow;
+        AnalysisRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// Determines if a transcribed paragraph likely contains a question.
+    /// Checks for question marks and common interview question patterns.
+    /// </summary>
+    private static bool IsQuestion(string text)
+    {
+        // Direct question mark
+        if (text.Contains('?')) return true;
+
+        var lower = text.ToLowerInvariant();
+
+        // Match any known question pattern
+        foreach (var pattern in QuestionKeywords)
+        {
+            if (lower.Contains(pattern)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if the text is a common rhetorical filler phrase that should be ignored.
+    /// </summary>
+    private static bool IsRhetorical(string text)
+    {
+        var lower = text.Trim().ToLowerInvariant().TrimEnd('.', '!');
+        // Exact match against blocklist (after normalizing trailing punctuation)
+        foreach (var phrase in RhetoricalBlocklist)
+        {
+            var normalizedPhrase = phrase.TrimEnd('.', '!', '?');
+            if (lower == normalizedPhrase || lower == phrase)
+                return true;
+        }
+        return false;
     }
 
     public void Dispose()
