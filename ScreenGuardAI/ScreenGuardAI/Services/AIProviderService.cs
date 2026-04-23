@@ -181,6 +181,23 @@ public class AIProviderService
         return await CallProviderAsync(providerKey, base64Image, apiKey, model, CODING_SYSTEM_PROMPT, userPrompt, maxTokens: 4096);
     }
 
+    /// <summary>
+    /// Text-only analysis of a meeting transcript (no screenshot needed).
+    /// Used when audio STT provides the question directly.
+    /// </summary>
+    public async Task<AIResponse> AnalyzeTranscriptAsync(string transcript, string providerKey, string apiKey, string model, InterviewMode mode, string? additionalContext = null)
+    {
+        var systemPrompt = mode == InterviewMode.Coding ? CODING_SYSTEM_PROMPT : QA_SYSTEM_PROMPT;
+        var userPrompt = mode == InterviewMode.Coding
+            ? $"The following is a transcript from a coding interview. Read the problem and provide a complete working code solution with explanation.\n\nTRANSCRIPT:\n{transcript}"
+            : $"The following is a transcript from my live interview. Find the question being asked and give me a ready-to-read answer I can say naturally.\n\nTRANSCRIPT:\n{transcript}";
+
+        if (!string.IsNullOrWhiteSpace(additionalContext))
+            userPrompt += $"\n\nAdditional context: {additionalContext}";
+
+        return await CallTextOnlyProviderAsync(providerKey, apiKey, model, systemPrompt, userPrompt);
+    }
+
     public async Task<(bool Success, string Message)> TestApiKeyAsync(string providerKey, string apiKey)
     {
         if (!Providers.TryGetValue(providerKey, out var provider))
@@ -228,6 +245,35 @@ public class AIProviderService
         catch (TaskCanceledException)
         {
             return new AIResponse { Success = false, ErrorMessage = "Request timed out. Please check your internet connection and try again." };
+        }
+        catch (Exception ex)
+        {
+            return new AIResponse { Success = false, ErrorMessage = $"Error: {ex.Message}" };
+        }
+    }
+
+    /// <summary>
+    /// Text-only provider call (no image). Used for transcript analysis.
+    /// </summary>
+    private async Task<AIResponse> CallTextOnlyProviderAsync(string providerKey, string apiKey,
+        string model, string systemPrompt, string userPrompt, int maxTokens = 2048)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return new AIResponse { Success = false, ErrorMessage = $"API key not configured for {providerKey}. Please set it in Settings." };
+
+        if (!Providers.TryGetValue(providerKey, out var provider))
+            return new AIResponse { Success = false, ErrorMessage = $"Unknown provider: {providerKey}" };
+
+        try
+        {
+            if (provider.ApiFormat == ApiFormat.Gemini)
+                return await CallGeminiTextOnlyAsync(provider, apiKey, model, systemPrompt, userPrompt, maxTokens);
+            else
+                return await CallOpenAITextOnlyAsync(provider, apiKey, model, systemPrompt, userPrompt, maxTokens);
+        }
+        catch (TaskCanceledException)
+        {
+            return new AIResponse { Success = false, ErrorMessage = "Request timed out." };
         }
         catch (Exception ex)
         {
@@ -350,6 +396,105 @@ public class AIProviderService
                                 data = base64Image
                             }
                         }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                maxOutputTokens = maxTokens,
+                temperature = 0.3
+            }
+        };
+
+        var json = JsonSerializer.Serialize(requestBody);
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        var response = await _httpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            return new AIResponse { Success = false, ErrorMessage = $"Gemini API Error ({response.StatusCode}): {responseBody}" };
+
+        var result = JsonSerializer.Deserialize<GeminiResponse>(responseBody);
+        var content = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text
+                      ?? "No response received.";
+
+        return new AIResponse { Success = true, Content = content };
+    }
+
+    /// <summary>
+    /// Text-only call to OpenAI-compatible APIs (no image).
+    /// </summary>
+    private async Task<AIResponse> CallOpenAITextOnlyAsync(ProviderDefinition provider, string apiKey,
+        string model, string systemPrompt, string userPrompt, int maxTokens)
+    {
+        var url = $"{provider.BaseUrl}/chat/completions";
+        bool isGroq = provider.Name == "Groq";
+
+        var userText = isGroq ? $"{systemPrompt}\n\n{userPrompt}" : userPrompt;
+
+        var messagesArray = new JsonArray();
+        if (!isGroq)
+            messagesArray.Add(new JsonObject { ["role"] = "system", ["content"] = systemPrompt });
+        messagesArray.Add(new JsonObject { ["role"] = "user", ["content"] = userText });
+
+        var requestBody = new JsonObject
+        {
+            ["model"] = model,
+            ["messages"] = messagesArray,
+            ["max_tokens"] = maxTokens,
+            ["temperature"] = 0.3
+        };
+
+        var json = requestBody.ToJsonString();
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("Authorization", $"Bearer {apiKey}");
+
+        if (provider.Name == "OpenRouter")
+        {
+            request.Headers.Add("HTTP-Referer", "https://screenguardai.app");
+            request.Headers.Add("X-Title", "ScreenGuard AI");
+        }
+
+        var response = await _httpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+            return new AIResponse { Success = false, ErrorMessage = $"{provider.Name} API Error ({response.StatusCode}): {responseBody}" };
+
+        var result = JsonSerializer.Deserialize<OpenAIResponse>(responseBody);
+        var content = result?.Choices?.FirstOrDefault()?.Message?.Content ?? "No response received.";
+
+        return new AIResponse { Success = true, Content = content };
+    }
+
+    /// <summary>
+    /// Text-only call to Gemini API (no image).
+    /// </summary>
+    private async Task<AIResponse> CallGeminiTextOnlyAsync(ProviderDefinition provider, string apiKey,
+        string model, string systemPrompt, string userPrompt, int maxTokens)
+    {
+        var url = $"{provider.BaseUrl}/models/{model}:generateContent?key={apiKey}";
+
+        var requestBody = new
+        {
+            system_instruction = new
+            {
+                parts = new[] { new { text = systemPrompt } }
+            },
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new { text = userPrompt }
                     }
                 }
             },

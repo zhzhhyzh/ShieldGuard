@@ -8,6 +8,7 @@ public class AppSettings
     public ProviderConfig Groq { get; set; } = new() { ApiKey = "", Model = "llama-4-scout-17b-16e-instruct" };
     public ProviderConfig OpenRouter { get; set; } = new() { ApiKey = "", Model = "google/gemini-2.0-flash-exp:free" };
     public HotkeySettings Hotkey { get; set; } = new();
+    public AudioSettings Audio { get; set; } = new();
     public string InterviewMode { get; set; } = "QA";
 
     /// <summary>
@@ -36,4 +37,14 @@ public class HotkeySettings
 {
     public string Modifiers { get; set; } = "Ctrl+Shift";
     public string Key { get; set; } = "Q";
+}
+
+public class AudioSettings
+{
+    public string WhisperModel { get; set; } = "base";
+    public string Language { get; set; } = "en";
+    public int SilenceThresholdMs { get; set; } = 1500;
+    public float SilenceLevel { get; set; } = 0.01f;
+    public bool AutoAnalyzeOnSpeech { get; set; } = false;
+    public bool EnableAudioCapture { get; set; } = false;
 }

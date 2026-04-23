@@ -17,6 +17,9 @@ public partial class MainWindow : Window
     private readonly SettingsService _settingsService = new();
     private readonly ProfileService _profileService = new();
     private ScreenMonitorService? _monitorService;
+    private AudioCaptureService? _audioCaptureService;
+    private TranscriptionService? _transcriptionService;
+    private AudioTranscriptManager? _audioManager;
     private OverlayWindow? _overlayWindow;
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
     private bool _isAnalyzing;
@@ -186,14 +189,17 @@ public partial class MainWindow : Window
 
             StatusBarText.Text = "Sending to AI...";
 
-            // Get optional context + profile context
+            // Get optional context + profile context + audio transcript
             string? context = null;
             var profileContext = _profileService.GetPromptContext();
             var extraContext = QuestionBox.Text?.Trim();
+            var audioTranscript = _audioManager?.GetRecentTranscript(5);
 
             var contextParts = new List<string>();
             if (!string.IsNullOrWhiteSpace(profileContext))
                 contextParts.Add($"INTERVIEWEE PROFILE:\n{profileContext}");
+            if (!string.IsNullOrWhiteSpace(audioTranscript))
+                contextParts.Add($"RECENT MEETING AUDIO TRANSCRIPT (what was spoken):\n{audioTranscript}");
             if (!string.IsNullOrWhiteSpace(extraContext))
                 contextParts.Add($"Additional context: {extraContext}");
 
@@ -413,6 +419,139 @@ public partial class MainWindow : Window
             (Color)ColorConverter.ConvertFromString("#1A6B1A"));
     }
 
+    // --- Audio Listen (Whisper STT) ---
+
+    private async void Listen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_audioManager != null && _audioManager.IsListening)
+        {
+            StopListening();
+        }
+        else
+        {
+            await StartListeningAsync();
+        }
+    }
+
+    private async Task StartListeningAsync()
+    {
+        try
+        {
+            ListenBtn.IsEnabled = false;
+            ListenBtn.Content = "[ LOADING ]";
+            StatusBarText.Text = "Initializing Whisper model...";
+            StatusBarText.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#00CC33"));
+
+            // Create services on first use
+            if (_audioManager == null)
+            {
+                _audioCaptureService = new AudioCaptureService();
+                _transcriptionService = new TranscriptionService();
+                _audioManager = new AudioTranscriptManager(_audioCaptureService, _transcriptionService);
+
+                // Apply settings
+                var audioSettings = _settingsService.Settings.Audio;
+                _audioCaptureService.SilenceTimeoutMs = audioSettings.SilenceThresholdMs;
+                _audioCaptureService.SilenceThreshold = audioSettings.SilenceLevel;
+                _audioManager.AutoAnalyzeOnSpeech = audioSettings.AutoAnalyzeOnSpeech;
+
+                // Wire events
+                _audioManager.TranscriptUpdated += (fullTranscript, latest) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        TranscriptText.Text = fullTranscript;
+                        TranscriptBorder.Visibility = Visibility.Visible;
+                    });
+                };
+
+                _audioManager.VolumeChanged += (level) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        double width = Math.Min(level * 400, 40); // scale to max 40px
+                        VolumeBar.Width = width;
+                    });
+                };
+
+                _audioManager.StatusChanged += (status) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusBarText.Text = status;
+                        StatusBarText.Foreground = new SolidColorBrush(
+                            (Color)ColorConverter.ConvertFromString("#00CC33"));
+                    });
+                };
+
+                _audioManager.DownloadProgressChanged += (mb) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        StatusBarText.Text = $"Downloading Whisper model... {mb} MB";
+                    });
+                };
+
+                _audioManager.AnalysisRequested += () =>
+                {
+                    Dispatcher.Invoke(() => _ = PerformAIAnalysis());
+                };
+            }
+
+            await _audioManager.StartListeningAsync();
+
+            // Update UI
+            ListenBtn.Content = "[ ON ]";
+            ListenBtn.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#00FF41"));
+            ListenBtn.Background = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#0D2B0D"));
+            ListenBtn.BorderBrush = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#1A5A1A"));
+            AudioIndicator.Fill = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#00FF41"));
+            TranscriptBorder.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            StatusBarText.Text = $"Audio error: {ex.Message}";
+            StatusBarText.Foreground = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#FF3333"));
+        }
+        finally
+        {
+            ListenBtn.IsEnabled = true;
+        }
+    }
+
+    private void StopListening()
+    {
+        _audioManager?.StopListening();
+
+        // Update UI
+        ListenBtn.Content = "[ OFF ]";
+        ListenBtn.Foreground = new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString("#555555"));
+        ListenBtn.Background = new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString("#141414"));
+        ListenBtn.BorderBrush = new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString("#1A3A1A"));
+        AudioIndicator.Fill = new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString("#555555"));
+        VolumeBar.Width = 0;
+
+        StatusBarText.Text = "Audio listening stopped";
+        StatusBarText.Foreground = new SolidColorBrush(
+            (Color)ColorConverter.ConvertFromString("#1A6B1A"));
+    }
+
+    private void ClearTranscript_Click(object sender, RoutedEventArgs e)
+    {
+        _audioManager?.ClearTranscript();
+        TranscriptText.Text = "";
+    }
+
     private void MinimizeToTray_Click(object sender, RoutedEventArgs e)
     {
         Hide();
@@ -439,6 +578,7 @@ public partial class MainWindow : Window
         }
 
         // Cleanup
+        _audioManager?.Dispose();
         _monitorService?.Dispose();
         _hotkeyService.Dispose();
         _overlayWindow?.Close();

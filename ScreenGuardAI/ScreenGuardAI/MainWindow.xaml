@@ -19,6 +19,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -92,6 +93,32 @@
                                     Click="AutoDetect_Click" Cursor="Hand" FontFamily="Consolas"/>
                         </Grid>
                     </Border>
+                    <!-- Audio Listen Toggle -->
+                    <Border Margin="0,6,0,0" Background="#0A0A0A" CornerRadius="3" Padding="8,5" 
+                            BorderBrush="#1A3A1A" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse x:Name="AudioIndicator" Width="6" Height="6" Fill="#555555" 
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="AUDIO STT (Whisper)" FontSize="10" 
+                                       Foreground="#1A6B1A" VerticalAlignment="Center" FontFamily="Consolas"/>
+                            <!-- Volume bar -->
+                            <Border x:Name="VolumeBorder" Grid.Column="2" Width="40" Height="6" 
+                                    Background="#141414" CornerRadius="3" Margin="6,0" VerticalAlignment="Center">
+                                <Border x:Name="VolumeBar" Width="0" Height="6" Background="#00FF41" 
+                                        CornerRadius="3" HorizontalAlignment="Left"/>
+                            </Border>
+                            <Button x:Name="ListenBtn" Grid.Column="3" Content="[ OFF ]" Padding="8,2"
+                                    Background="#141414" Foreground="#555555" FontSize="9" FontWeight="Bold"
+                                    BorderBrush="#1A3A1A" BorderThickness="1"
+                                    Click="Listen_Click" Cursor="Hand" FontFamily="Consolas"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 
@@ -144,8 +171,37 @@
                      Text="" ToolTip="Optional: add context like 'This is a React position' or 'Focus on system design'"/>
         </Grid>
 
+        <!-- Live Transcript Area -->
+        <Border x:Name="TranscriptBorder" Grid.Row="4" Background="#050505" CornerRadius="4" Padding="8" 
+                BorderBrush="#0D3A0D" BorderThickness="1" Margin="0,0,0,8"
+                MaxHeight="100" Visibility="Collapsed">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="// LIVE TRANSCRIPT (Whisper STT)" FontSize="9" FontWeight="Bold" 
+                               Foreground="#1A6B1A" VerticalAlignment="Center" FontFamily="Consolas"/>
+                    <Button x:Name="ClearTranscriptBtn" Grid.Column="1" Content="[ CLEAR ]" Padding="6,2"
+                            Background="#141414" Foreground="#555555" BorderBrush="#1A3A1A" BorderThickness="1"
+                            FontSize="8" Click="ClearTranscript_Click" Cursor="Hand" FontFamily="Consolas"/>
+                </Grid>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="60">
+                    <TextBlock x:Name="TranscriptText" TextWrapping="Wrap" 
+                               Foreground="#33AA33" FontSize="10" LineHeight="14"
+                               FontFamily="Consolas, Cascadia Code, Courier New"
+                               Text=""/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
         <!-- Last Response Area -->
-        <Border Grid.Row="4" Background="#050505" CornerRadius="4" Padding="12" 
+        <Border Grid.Row="5" Background="#050505" CornerRadius="4" Padding="12" 
                 BorderBrush="#0D3A0D" BorderThickness="1">
             <Grid>
                 <Grid.RowDefinitions>
@@ -174,7 +230,7 @@
         </Border>
 
         <!-- Footer Status -->
-        <Grid Grid.Row="5" Margin="0,8,0,0">
+        <Grid Grid.Row="6" Margin="0,8,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
