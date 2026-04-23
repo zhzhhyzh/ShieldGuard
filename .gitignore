@@ -25,3 +25,9 @@ desktop.ini
 
 # .NET tools
 .dotnet/
+
+# Release build artifacts
+release-build/
+release-package/
+*.zip
+*.png
