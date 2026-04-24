@@ -23,7 +23,6 @@ public partial class MainWindow : Window
     private OverlayWindow? _overlayWindow;
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
     private bool _isAnalyzing;
-    private bool _forceClose;
     private InterviewMode _currentMode = InterviewMode.QA;
     private string _lastResponse = string.Empty;
 
@@ -113,7 +112,6 @@ public partial class MainWindow : Window
         var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit" };
         exitItem.Click += (s, e) =>
         {
-            _forceClose = true;
             Dispatcher.Invoke(() => Close());
         };
 
@@ -138,7 +136,18 @@ public partial class MainWindow : Window
 
     private void OnHotkeyPressed()
     {
-        Dispatcher.Invoke(() => _ = PerformAIAnalysis());
+        Dispatcher.Invoke(() =>
+        {
+            // Hotkey is for Coding mode only — Q&A mode uses automatic audio-triggered analysis
+            if (_currentMode == InterviewMode.QA)
+            {
+                StatusBarText.Text = "Hotkey disabled in Q&A mode — AI auto-analyzes from audio";
+                StatusBarText.Foreground = new SolidColorBrush(
+                    (Color)ColorConverter.ConvertFromString("#FFAA00"));
+                return;
+            }
+            _ = PerformAIAnalysis();
+        });
     }
 
     private async Task PerformAIAnalysis()
@@ -516,9 +525,21 @@ public partial class MainWindow : Window
                 var audioSettings = _settingsService.Settings.Audio;
                 _audioCaptureService.SilenceTimeoutMs = audioSettings.SilenceThresholdMs;
                 _audioCaptureService.SilenceThreshold = audioSettings.SilenceLevel;
-                _audioManager.AutoAnalyzeOnSpeech = audioSettings.AutoAnalyzeOnSpeech;
-                _audioManager.SmartQuestionDetection = audioSettings.SmartQuestionDetection;
                 _audioManager.AnalysisCooldownSeconds = audioSettings.AnalysisCooldownSeconds;
+
+                // In Q&A mode: force auto-analysis + smart question detection ON
+                // so the AI auto-catches questions without hotkey.
+                // In Coding mode: respect user settings (manual hotkey is primary).
+                if (_currentMode == InterviewMode.QA)
+                {
+                    _audioManager.AutoAnalyzeOnSpeech = true;
+                    _audioManager.SmartQuestionDetection = true;
+                }
+                else
+                {
+                    _audioManager.AutoAnalyzeOnSpeech = audioSettings.AutoAnalyzeOnSpeech;
+                    _audioManager.SmartQuestionDetection = audioSettings.SmartQuestionDetection;
+                }
 
                 // Wire events
                 _audioManager.TranscriptUpdated += (fullTranscript, latest) =>
@@ -634,14 +655,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
-        if (!_forceClose)
-        {
-            e.Cancel = true;
-            Hide();
-            return;
-        }
-
-        // Cleanup
+        // Cleanup all resources and exit
         _audioManager?.Dispose();
         _monitorService?.Dispose();
         _hotkeyService.Dispose();

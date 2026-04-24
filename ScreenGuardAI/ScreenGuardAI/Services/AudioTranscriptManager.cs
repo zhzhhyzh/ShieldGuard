@@ -13,6 +13,11 @@ public class AudioTranscriptManager : IDisposable
     private readonly object _transcriptLock = new();
     private DateTime _lastAnalysisTime = DateTime.MinValue;
 
+    // Sliding-window rate limiter: tracks timestamps of recent API calls
+    private readonly Queue<DateTime> _callTimestamps = new();
+    private const int MaxCallsPerWindow = 3;          // max 3 calls per window
+    private static readonly TimeSpan RateWindow = TimeSpan.FromMinutes(2); // 2-minute window
+
     /// <summary>Max paragraphs to keep in rolling transcript.</summary>
     public int MaxParagraphs { get; set; } = 20;
 
@@ -212,6 +217,20 @@ public class AudioTranscriptManager : IDisposable
             return;
         }
 
+        // ── Sliding-window rate limiter ──
+        var now = DateTime.UtcNow;
+        // Evict expired timestamps
+        while (_callTimestamps.Count > 0 && (now - _callTimestamps.Peek()) > RateWindow)
+            _callTimestamps.Dequeue();
+
+        if (_callTimestamps.Count >= MaxCallsPerWindow)
+        {
+            var oldest = _callTimestamps.Peek();
+            var waitSec = (int)(RateWindow - (now - oldest)).TotalSeconds + 1;
+            StatusChanged?.Invoke($"AUTO-ANALYZE: rate limit ({MaxCallsPerWindow} calls/{(int)RateWindow.TotalMinutes}min, retry in {waitSec}s)");
+            return;
+        }
+
         // ── Question detection (with rhetorical + min-length filters) ──
         if (SmartQuestionDetection)
         {
@@ -239,6 +258,7 @@ public class AudioTranscriptManager : IDisposable
         }
 
         _lastAnalysisTime = DateTime.UtcNow;
+        _callTimestamps.Enqueue(DateTime.UtcNow);
         AnalysisRequested?.Invoke();
     }
 
