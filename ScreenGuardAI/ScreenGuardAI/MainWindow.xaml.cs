@@ -147,11 +147,11 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            // Hotkey is for Coding mode only — Q&A/Behavioral modes use automatic audio-triggered analysis
-            if (_currentMode != InterviewMode.Coding)
+            // Hotkey works in Coding + Behavioral modes (screen-based)
+            // Q&A mode uses automatic audio-triggered analysis instead
+            if (_currentMode == InterviewMode.QA)
             {
-                var modeName = _currentMode == InterviewMode.Behavioral ? "Behavioral" : "Q&A";
-                StatusBarText.Text = $"Hotkey disabled in {modeName} mode \u2014 AI auto-analyzes from audio";
+                StatusBarText.Text = "Hotkey disabled in Q&A mode \u2014 AI auto-analyzes from audio";
                 StatusBarText.Foreground = new SolidColorBrush(
                     (Color)ColorConverter.ConvertFromString("#FFAA00"));
                 return;
