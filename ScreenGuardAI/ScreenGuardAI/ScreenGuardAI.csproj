@@ -11,7 +11,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- App metadata -->
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <Product>ScreenGuard AI</Product>
     <Company>ScreenGuard AI</Company>
     <Description>AI-powered interview assistant with screen capture protection</Description>

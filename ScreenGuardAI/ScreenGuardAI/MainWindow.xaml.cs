@@ -44,6 +44,11 @@ public partial class MainWindow : Window
             CodingModeRadio.IsChecked = true;
             _currentMode = InterviewMode.Coding;
         }
+        else if (_settingsService.Settings.InterviewMode == "Behavioral")
+        {
+            BehavioralModeRadio.IsChecked = true;
+            _currentMode = InterviewMode.Behavioral;
+        }
 
         // Register global hotkey
         bool hotkeyRegistered = _hotkeyService.Register(this);
@@ -106,6 +111,9 @@ public partial class MainWindow : Window
         var codingItem = new System.Windows.Controls.MenuItem { Header = "Switch to Coding Mode" };
         codingItem.Click += (s, e) => Dispatcher.Invoke(() => { CodingModeRadio.IsChecked = true; });
 
+        var behavioralItem = new System.Windows.Controls.MenuItem { Header = "Switch to Behavioral Mode" };
+        behavioralItem.Click += (s, e) => Dispatcher.Invoke(() => { BehavioralModeRadio.IsChecked = true; });
+
         var settingsItem = new System.Windows.Controls.MenuItem { Header = "Settings" };
         settingsItem.Click += (s, e) => Dispatcher.Invoke(() => Settings_Click(s, e));
 
@@ -120,6 +128,7 @@ public partial class MainWindow : Window
         contextMenu.Items.Add(new System.Windows.Controls.Separator());
         contextMenu.Items.Add(qaItem);
         contextMenu.Items.Add(codingItem);
+        contextMenu.Items.Add(behavioralItem);
         contextMenu.Items.Add(new System.Windows.Controls.Separator());
         contextMenu.Items.Add(settingsItem);
         contextMenu.Items.Add(new System.Windows.Controls.Separator());
@@ -138,10 +147,11 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
-            // Hotkey is for Coding mode only — Q&A mode uses automatic audio-triggered analysis
-            if (_currentMode == InterviewMode.QA)
+            // Hotkey is for Coding mode only — Q&A/Behavioral modes use automatic audio-triggered analysis
+            if (_currentMode != InterviewMode.Coding)
             {
-                StatusBarText.Text = "Hotkey disabled in Q&A mode — AI auto-analyzes from audio";
+                var modeName = _currentMode == InterviewMode.Behavioral ? "Behavioral" : "Q&A";
+                StatusBarText.Text = $"Hotkey disabled in {modeName} mode \u2014 AI auto-analyzes from audio";
                 StatusBarText.Foreground = new SolidColorBrush(
                     (Color)ColorConverter.ConvertFromString("#FFAA00"));
                 return;
@@ -238,11 +248,13 @@ public partial class MainWindow : Window
 
             try
             {
-                response = _currentMode == InterviewMode.Coding
-                    ? await _aiService.CallWithFailoverAsync(providerChain,
-                        (pk, key, mdl) => _aiService.AnalyzeCodingPracticalAsync(base64, pk, key, mdl, context), settings)
-                    : await _aiService.CallWithFailoverAsync(providerChain,
-                        (pk, key, mdl) => _aiService.AnalyzeInterviewQAAsync(base64, pk, key, mdl, context), settings);
+                Func<string, string, string, Task<Models.AIResponse>> analyzeFunc = _currentMode switch
+                {
+                    InterviewMode.Coding => (pk, key, mdl) => _aiService.AnalyzeCodingPracticalAsync(base64, pk, key, mdl, context),
+                    InterviewMode.Behavioral => (pk, key, mdl) => _aiService.AnalyzeBehavioralAsync(base64, pk, key, mdl, context),
+                    _ => (pk, key, mdl) => _aiService.AnalyzeInterviewQAAsync(base64, pk, key, mdl, context)
+                };
+                response = await _aiService.CallWithFailoverAsync(providerChain, analyzeFunc, settings);
             }
             finally
             {
@@ -259,8 +271,12 @@ public partial class MainWindow : Window
                 LastResponseText.Text = response.Content;
                 LastResponseText.Foreground = new SolidColorBrush(
                     (Color)ColorConverter.ConvertFromString("#00DD33"));
-                ResponseHeaderText.Text = _currentMode == InterviewMode.Coding
-                    ? "Code Solution" : "Interview Answer";
+                ResponseHeaderText.Text = _currentMode switch
+                {
+                    InterviewMode.Coding => "Code Solution",
+                    InterviewMode.Behavioral => "Behavioral Answer",
+                    _ => "Interview Answer"
+                };
                 CopyResponseBtn.Visibility = Visibility.Visible;
                 StatusBarText.Text = $"Done at {response.Timestamp:HH:mm:ss}";
                 StatusBarText.Foreground = new SolidColorBrush(
@@ -304,14 +320,12 @@ public partial class MainWindow : Window
         // Guard against being called before XAML controls are initialized
         if (ModeDescriptionText == null) return;
 
-        if (_currentMode == InterviewMode.Coding)
+        ModeDescriptionText.Text = _currentMode switch
         {
-            ModeDescriptionText.Text = "> Captures meeting screen, reads the coding problem, generates complete code + explanation";
-        }
-        else
-        {
-            ModeDescriptionText.Text = "> Captures meeting screen (Zoom/Meet/Teams), finds question from captions/chat/shared content";
-        }
+            InterviewMode.Coding => "> Captures meeting screen, reads the coding problem, generates complete code + explanation",
+            InterviewMode.Behavioral => "> Detects behavioral/situational questions, generates natural STAR-method answers from your profile",
+            _ => "> Captures meeting screen (Zoom/Meet/Teams), finds question from captions/chat/shared content"
+        };
     }
 
     private void Mode_Changed(object sender, RoutedEventArgs e)
@@ -323,6 +337,11 @@ public partial class MainWindow : Window
         {
             _currentMode = InterviewMode.Coding;
             _settingsService.Settings.InterviewMode = "Coding";
+        }
+        else if (BehavioralModeRadio?.IsChecked == true)
+        {
+            _currentMode = InterviewMode.Behavioral;
+            _settingsService.Settings.InterviewMode = "Behavioral";
         }
         else
         {
@@ -527,10 +546,10 @@ public partial class MainWindow : Window
                 _audioCaptureService.SilenceThreshold = audioSettings.SilenceLevel;
                 _audioManager.AnalysisCooldownSeconds = audioSettings.AnalysisCooldownSeconds;
 
-                // In Q&A mode: force auto-analysis + smart question detection ON
+                // In Q&A/Behavioral mode: force auto-analysis + smart question detection ON
                 // so the AI auto-catches questions without hotkey.
                 // In Coding mode: respect user settings (manual hotkey is primary).
-                if (_currentMode == InterviewMode.QA)
+                if (_currentMode == InterviewMode.QA || _currentMode == InterviewMode.Behavioral)
                 {
                     _audioManager.AutoAnalyzeOnSpeech = true;
                     _audioManager.SmartQuestionDetection = true;

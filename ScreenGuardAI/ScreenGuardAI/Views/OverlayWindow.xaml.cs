@@ -54,6 +54,10 @@ public partial class OverlayWindow : Window
         {
             ResponseText.Text = "Reading coding problem and generating solution...";
         }
+        else if (mode == InterviewMode.Behavioral)
+        {
+            ResponseText.Text = "Detecting behavioral question and crafting your answer...";
+        }
         else
         {
             ResponseText.Text = "Listening for the interview question...";
@@ -91,7 +95,7 @@ public partial class OverlayWindow : Window
         _responseContent = response.Content;
         TimestampText.Text = response.Timestamp.ToString("HH:mm:ss");
 
-        if (mode == InterviewMode.QA)
+        if (mode == InterviewMode.QA || mode == InterviewMode.Behavioral)
         {
             DisplayQAResponse(response.Content);
         }
@@ -162,6 +166,12 @@ public partial class OverlayWindow : Window
             ModeBadgeText.Text = "CODING";
             ModeBadge.Background = new SolidColorBrush(
                 (Color)ColorConverter.ConvertFromString("#00CC33"));
+        }
+        else if (mode == InterviewMode.Behavioral)
+        {
+            ModeBadgeText.Text = "BEHAVIORAL";
+            ModeBadge.Background = new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString("#33AAFF"));
         }
         else
         {

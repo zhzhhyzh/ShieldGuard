@@ -188,6 +188,24 @@ public class AIProviderService
         "CODE:\n```\n[complete solution code]\n```\n\n" +
         "EXPLANATION:\n[brief explanation of approach, why this solution works, and complexity]";
 
+    private const string BEHAVIORAL_SYSTEM_PROMPT =
+        "You are an expert interview coach specializing in behavioral and situational interview questions. " +
+        "The user is in a live interview right now. The screenshot is from a video meeting platform. " +
+        "The interview question may appear in live captions, chat, shared screen, or any visible text.\n\n" +
+        "Your job:\n" +
+        "1. Scan ALL visible text to find the behavioral/situational interview question being asked.\n" +
+        "2. Generate a natural, conversational answer the interviewee can read aloud as if speaking from memory.\n" +
+        "3. Internally structure your answer using the STAR method (Situation, Task, Action, Result), but DO NOT label or mention these sections.\n" +
+        "4. The answer MUST flow as one continuous, natural narrative — like telling a story to a friend. No bullet points, no section headers, no bold labels.\n" +
+        "5. Start with a brief setup (a real-sounding scenario from work), naturally transition into what you did and why, then land on the outcome and what you learned.\n" +
+        "6. Use first-person perspective and conversational transitions like 'So what I did was...', 'That led to...', 'In the end...'.\n" +
+        "7. Keep it 3-5 sentences. Sound confident and authentic, not rehearsed or robotic.\n" +
+        "8. NEVER use phrases like 'The situation was', 'My task was', 'The action I took', 'The result was', 'In terms of', 'background', 'the difficult part' — these sound scripted.\n" +
+        "9. Tailor the answer to the user's profile if provided (role, tech stack, experience level, projects).\n\n" +
+        "Format your response EXACTLY like this:\n" +
+        "QUESTION: [the extracted question]\n\n" +
+        "ANSWER:\n[the ready-to-speak natural answer — no headers, no labels, just a flowing story]";
+
     // --- Public API ---
 
     /// <summary>
@@ -254,16 +272,35 @@ public class AIProviderService
         return await CallProviderAsync(providerKey, base64Image, apiKey, model, CODING_SYSTEM_PROMPT, userPrompt, maxTokens: 4096);
     }
 
+    public async Task<AIResponse> AnalyzeBehavioralAsync(string base64Image, string providerKey, string apiKey, string model, string? additionalContext = null)
+    {
+        var userPrompt = "Look at this screenshot from my live interview (video meeting). " +
+            "Find the behavioral or situational question being asked - check captions, chat, shared content. " +
+            "Give me a natural, story-like answer I can say as if recalling a real experience.";
+        if (!string.IsNullOrWhiteSpace(additionalContext))
+            userPrompt += $"\n\nAdditional context: {additionalContext}";
+
+        return await CallProviderAsync(providerKey, base64Image, apiKey, model, BEHAVIORAL_SYSTEM_PROMPT, userPrompt);
+    }
+
     /// <summary>
     /// Text-only analysis of a meeting transcript (no screenshot needed).
     /// Used when audio STT provides the question directly.
     /// </summary>
     public async Task<AIResponse> AnalyzeTranscriptAsync(string transcript, string providerKey, string apiKey, string model, InterviewMode mode, string? additionalContext = null)
     {
-        var systemPrompt = mode == InterviewMode.Coding ? CODING_SYSTEM_PROMPT : QA_SYSTEM_PROMPT;
-        var userPrompt = mode == InterviewMode.Coding
-            ? $"The following is a transcript from a coding interview. Read the problem and provide a complete working code solution with explanation.\n\nTRANSCRIPT:\n{transcript}"
-            : $"The following is a transcript from my live interview. Find the question being asked and give me a ready-to-read answer I can say naturally.\n\nTRANSCRIPT:\n{transcript}";
+        var systemPrompt = mode switch
+        {
+            InterviewMode.Coding => CODING_SYSTEM_PROMPT,
+            InterviewMode.Behavioral => BEHAVIORAL_SYSTEM_PROMPT,
+            _ => QA_SYSTEM_PROMPT
+        };
+        var userPrompt = mode switch
+        {
+            InterviewMode.Coding => $"The following is a transcript from a coding interview. Read the problem and provide a complete working code solution with explanation.\n\nTRANSCRIPT:\n{transcript}",
+            InterviewMode.Behavioral => $"The following is a transcript from my live interview. Find the behavioral question and give me a natural, story-like answer I can say as if recalling a real experience.\n\nTRANSCRIPT:\n{transcript}",
+            _ => $"The following is a transcript from my live interview. Find the question being asked and give me a ready-to-read answer I can say naturally.\n\nTRANSCRIPT:\n{transcript}"
+        };
 
         if (!string.IsNullOrWhiteSpace(additionalContext))
             userPrompt += $"\n\nAdditional context: {additionalContext}";

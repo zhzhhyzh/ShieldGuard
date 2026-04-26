@@ -9,7 +9,8 @@ namespace ScreenGuardAI.Services;
 public enum InterviewMode
 {
     QA,
-    Coding
+    Coding,
+    Behavioral
 }
 
 public class OpenAIVisionService
@@ -59,6 +60,24 @@ public class OpenAIVisionService
         "CODE:\n```\n[complete solution code]\n```\n\n" +
         "EXPLANATION:\n[brief explanation of approach, why this solution works, and complexity]";
 
+    private const string BEHAVIORAL_SYSTEM_PROMPT =
+        "You are an expert interview coach specializing in behavioral and situational interview questions. " +
+        "The user is in a live interview right now. The screenshot is from a video meeting platform. " +
+        "The interview question may appear in live captions, chat, shared screen, or any visible text.\n\n" +
+        "Your job:\n" +
+        "1. Scan ALL visible text to find the behavioral/situational interview question being asked.\n" +
+        "2. Generate a natural, conversational answer the interviewee can read aloud as if speaking from memory.\n" +
+        "3. Internally structure your answer using the STAR method (Situation, Task, Action, Result), but DO NOT label or mention these sections.\n" +
+        "4. The answer MUST flow as one continuous, natural narrative — like telling a story to a friend. No bullet points, no section headers, no bold labels.\n" +
+        "5. Start with a brief setup (a real-sounding scenario from work), naturally transition into what you did and why, then land on the outcome and what you learned.\n" +
+        "6. Use first-person perspective and conversational transitions like 'So what I did was...', 'That led to...', 'In the end...'.\n" +
+        "7. Keep it 3-5 sentences. Sound confident and authentic, not rehearsed or robotic.\n" +
+        "8. NEVER use phrases like 'The situation was', 'My task was', 'The action I took', 'The result was', 'In terms of', 'background', 'the difficult part' — these sound scripted.\n" +
+        "9. Tailor the answer to the user's profile if provided (role, tech stack, experience level, projects).\n\n" +
+        "Format your response EXACTLY like this:\n" +
+        "QUESTION: [the extracted question]\n\n" +
+        "ANSWER:\n[the ready-to-speak natural answer — no headers, no labels, just a flowing story]";
+
     /// <summary>
     /// Analyzes a screenshot in interview Q&A mode.
     /// </summary>
@@ -85,6 +104,20 @@ public class OpenAIVisionService
             userPrompt += $"\n\nAdditional context: {additionalContext}";
 
         return await CallVisionAPIAsync(base64Image, apiKey, model, CODING_SYSTEM_PROMPT, userPrompt, maxTokens: 2048);
+    }
+
+    /// <summary>
+    /// Analyzes a screenshot in behavioral interview mode.
+    /// </summary>
+    public async Task<AIResponse> AnalyzeBehavioralAsync(string base64Image, string apiKey, string model = "gpt-4o", string? additionalContext = null)
+    {
+        var userPrompt = "Look at this screenshot from my live interview (video meeting). " +
+            "Find the behavioral or situational question being asked - check captions, chat, shared content. " +
+            "Give me a natural, story-like answer I can say as if recalling a real experience.";
+        if (!string.IsNullOrWhiteSpace(additionalContext))
+            userPrompt += $"\n\nAdditional context: {additionalContext}";
+
+        return await CallVisionAPIAsync(base64Image, apiKey, model, BEHAVIORAL_SYSTEM_PROMPT, userPrompt);
     }
 
     /// <summary>

@@ -67,9 +67,13 @@
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="QAModeRadio" Content="  Q&amp;A Interview" 
                                      GroupName="Mode" IsChecked="True"
-                                     Foreground="#00FF41" FontSize="12" Margin="0,0,20,0"
+                                     Foreground="#00FF41" FontSize="12" Margin="0,0,16,0"
                                      Checked="Mode_Changed" Cursor="Hand" FontFamily="Consolas"/>
                         <RadioButton x:Name="CodingModeRadio" Content="  Coding Practical" 
+                                     GroupName="Mode"
+                                     Foreground="#00FF41" FontSize="12" Margin="0,0,16,0"
+                                     Checked="Mode_Changed" Cursor="Hand" FontFamily="Consolas"/>
+                        <RadioButton x:Name="BehavioralModeRadio" Content="  Behavioral" 
                                      GroupName="Mode"
                                      Foreground="#00FF41" FontSize="12"
                                      Checked="Mode_Changed" Cursor="Hand" FontFamily="Consolas"/>
